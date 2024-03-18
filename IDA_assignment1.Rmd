@@ -1,0 +1,208 @@
+---
+title: "IDA_assigment1"
+author: "Haoxin Liang"
+date: "2024-03-18"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+Sys.setenv(LANGUAGE = "en")
+```
+The github repository: https://github.com/whisperx2/IDA_assignment1
+
+## Q1
+
+### (a)
+
+For Z:
+\begin{equation}
+\begin{aligned}
+P(Z \leq z) &= 1 - P(Z \geq z)\\
+            &= 1 - P(X \geq z)P(Y \geq z)\\
+            &= 1 - (\frac{1}{z^\lambda})(\frac{1}{z^\mu})\\
+            &= 1 - \frac{1}{z^{\lambda+\mu}}\\
+\end{aligned}
+\end{equation}
+Hence, $Z\sim Pareto(\lambda + \mu)$, and we have $f_{Z}(z;\lambda + \mu)=(\lambda + 
+\mu) z^{-(\lambda + \mu+1)}$, for $z\geq 1$.
+
+For $\delta$:
+\begin{equation}
+\begin{aligned}
+f_{\delta}(1) &= P(X \leq Y)\\
+              &= \int^{\infty}_{1}P(X \leq Y|Y=y)P_{Y}(y)dy \hspace{6mm}\text{since X and Y are independent}\\&= \int^{\infty}_{1}(1-\frac{1}{y^\lambda})\mu y^{-\mu-1}dy\\
+              &= [-y^{-\mu}+\frac{\mu}{\mu+\lambda}y^{-(\mu+\lambda)}]^{\infty}_{y=1}\\
+              &= 1-\frac{\mu}{\mu+\lambda}\\
+              &= \frac{\lambda}{\mu+\lambda}
+\end{aligned}
+\end{equation}
+So we have $\delta \sim Bernoulli(\frac{\lambda}{\mu+\lambda})$, and $f_{\delta}(0)=1-f_{\delta}(1)=\frac{\mu}{\mu+\lambda}.$
+
+### (b)
+
+For $\theta$:
+\begin{equation}
+\begin{aligned}
+L(\theta)     &=\prod^{n}_{i=1}\theta z_{i}^{-(\theta+1)}\\
+l(\theta)     &=n\ln\theta-(\theta+1)\sum^{n}_{i=1} \ln z_{i}\\
+l^{'}(\theta) &=\frac{n}{\theta} - \sum^{n}_{i=1}\ln z_{i}=0\\
+\hat{\theta}  & = \frac{n}{\sum^{n}_{i=1}\ln z_{i}}\\
+l^{''}(\theta)&=-\frac{n}{\theta^2} \\
+\end{aligned}
+\end{equation}
+Since $\theta=\lambda + \mu >0$, we have $l^{''}(\hat{\theta})=-\frac{n}{\hat{\theta}^2}<0$, thus $\hat{\theta}$ is indeed the m.l.e. of $\theta$.
+
+For $p$:
+\begin{equation}
+\begin{aligned}
+L(p)     &=\prod^{n}_{i=1} p^{\delta_i}(1-p)^{1-\delta_i}\\
+l(p)     &=\ln p \sum^{n}_{i=1}\delta_{i} + \ln(1-p)\sum^{n}_{i=1}(1-\delta_{i})\\
+l^{'}(p) &=\frac{\sum^{n}_{i=1}\delta_{i}}{p}-\frac{\sum^{n}_{i=1}(1-\delta_{i})}{1-p}\\
+\hat{p}  &= \frac{\sum^{n}_{i=1}\delta_{i}}{n}\\
+l^{''}(p)&=-\frac{\sum^{n}_{i=1}\delta_{i}}{p^{2}}-\frac{n-\sum^{n}_{i=1}\delta_{i}}{(1-p)^{2}} \\
+\end{aligned}
+\end{equation}
+Since $0 < p=\frac{\lambda}{\lambda + \mu} <1$, we have $l^{''}(\hat{p})=-\frac{\sum^{n}_{i=1}\delta_{i}}{\hat{p}^{2}}-\frac{n-\sum^{n}_{i=1}\delta_{i}}{(1-\hat{p})^{2}}<0$, thus $\hat{p}$ is indeed the m.l.e. of $p$.
+
+### (c)
+
+For $\theta$, the asymptotic variance of $\theta$ is: \[var(\hat{\theta})=-E(l^{''}(\hat{\theta}))^{-1}=\frac{\hat{\theta}^2}{n}\], thus
+the 95% confidence interval for $\theta$ is $[\hat{\theta}-1.96\frac{\hat{\theta}}{\sqrt{n}}, \hat{\theta}+1.96\frac{\hat{\theta}}{\sqrt{n}}]$, where $\hat{\theta}=\frac{n}{\sum^{n}_{i=1}\ln z_{i}}$
+
+Similarly, for $p$, the asymptotic variance is: \[var(\hat{p})=-E(l^{''}(\hat{p}))^{-1}= E(\frac{\hat{p}^{2}(1-\hat{p})^{2}}{n\hat{p}^{2}+\sum^{n}_{i=1}\delta_{i}-2\hat{p}\sum^{n}_{i=1}\delta_{i}})=
+\frac{\hat{p}^{2}(1-\hat{p})^{2}}{n\hat{p}^{2}+n\hat{p}-2n\hat{p}^2}=\frac{\hat{p}(1-\hat{p})}{n}\], thus the 95% confidence interval for $p$ is $[\hat{p}-1.96\sqrt{\frac{\hat{p}(1-\hat{p})}{n}}, \hat{p}+1.96\sqrt{\frac{\hat{p}(1-\hat{p})}{n}}]$, where $\hat{p}=\frac{\sum^{n}_{i=1}\delta_{i}}{n}$
+
+## Q2
+
+```{r}
+library(mice)
+set.seed(1)
+# load the data
+load("dataex2.Rdata")
+M <- 20
+# determine whether the true value is within the confidence interval
+coverage <- function(true_value, CI) {
+  sum((CI[, 1]<= true_value) & (CI[, 2]>=true_value))
+}
+# Perform multiple imputation and calculate coverage probabilities
+stochastic_coverage <- bootstrap_coverage <- numeric(100)
+
+for (i in 1:100) {
+  # extract the data
+  data <- dataex2[, , i]
+  colnames(data) <- c("X", "Y")
+  
+  # Perform stochastic regression imputation
+  fit_stochastic <- with(mice(data, method = "norm", m = M, print = FALSE), lm(Y ~ X))
+  sum_stochastic <- summary(pool(fit_stochastic))
+  stochastic_CI <- cbind(sum_stochastic[2, 2] - 1.96 * sum_stochastic[2, 3],
+                           sum_stochastic[2, 2] + 1.96 * sum_stochastic[2, 3])
+  stochastic_coverage[i] <- coverage(3, stochastic_CI)
+  
+  # Perform bootstrap-based imputation
+  fit_bootstrap <- with(mice(data, method = "norm.boot", m = M, print = FALSE), lm(Y ~ X))
+  sum_bootstrap <- summary(pool(fit_bootstrap))
+  bootstrap_CI <- cbind(sum_bootstrap[2, 2] - 1.96 * sum_bootstrap[2, 3],
+                          sum_bootstrap[2, 2] + 1.96 * sum_bootstrap[2, 3])
+  bootstrap_coverage[i] <- coverage(3,  bootstrap_CI)
+}
+
+# Print the results
+cat("Empirical Coverage Probability for Stochastic Regression imputation:", sum(stochastic_coverage)/100, "\n")
+cat("Empirical Coverage Probability for Bootstrap based imputation :", sum(bootstrap_coverage)/100)
+```
+## Q3
+
+### (a)
+
+If $r_{i}=1$, \[f(x_{i};\mu, \sigma^2)=\phi(x_{i};\mu, \sigma^2)\]
+If $r_{i}=0$, the likelihood function is \[P(Y_i<D;\mu, \sigma^2)=\Phi(D;\mu, \sigma^2)=\Phi(x_{i};\mu, \sigma^2)\] \hspace{3mm} since $x_i$ is left censored to D.
+
+Thus, \[\ln L(\mu, \sigma^2|\mathbf{x},\mathbf{r})=\ln \prod^{n}_{i=1}\phi(x_{i};\mu, \sigma^2)^{r_i}\Phi(D;\mu, \sigma^2)^{1-r_i}=\sum^{n}_{i=1}\{r_{i}\ln \phi(x_{i};\mu, \sigma^2)+(1-r_{i})\ln \Phi(x_{i};\mu, \sigma^2)\} \]
+
+### (b)
+
+```{r}
+library(maxLik)
+set.seed(1)
+
+# Load the data
+load("dataex3.Rdata")
+X <- dataex3$X
+R <- dataex3$R
+sigma <- 1.5
+# define the log-likelihood function
+log_likelihood <- function(mu, x, r, sigma) {
+  LogLik <- sum(r*dnorm(x, mean = mu, sd = sigma)
+             + (1-r)*pnorm(x, mean = mu, sd = sigma))
+  return(-LogLik) # the default optimization setting is minimization
+}
+optimal_result <- optim(
+  par = mean(X), # initial guess for mu
+  fn = log_likelihood, 
+  x = X,
+  r = R, 
+  sigma = sigma, 
+  method = "BFGS" 
+)
+optimal_result$par
+```
+
+## Q4
+
+### (a)
+Yes, since the missing indicator only depends on $y_1$ and $\phi$, which that are
+distinct from $\theta$, the parameters of the bivariate normal distribution. Therefore,
+this missing data mechanism is ignorable for likelihood-based estimation.
+
+### (b)
+No, the missingness of $Y_2$ depends on the unobserved value $y_2$, which makes 
+the mechanism MNAR (Missing Not at Random).
+
+### (c) 
+No, although the missingness of $Y_2$ depends only on the observed values $y_1$,
+the parameter $\mu_1$ is not distinct from $\theta$. This violates the second
+condition for ignorability. Therefore, this missing data mechanism is not 
+ignorable for likelihood-based estimation.
+
+## Q5
+
+```{r}
+# load the data
+load('dataex5.Rdata')
+X <- dataex5$X
+Y <- dataex5$Y
+
+# initialize beta
+beta <- c(beta_0 = 0, beta_1 = 0) 
+new_beta <- c(1,1)
+# calculate Bernoulli parameter p_i
+p_i <- function(beta, X) {
+  exp(beta[1]+beta[2]*X)/(1+exp(beta[1]+beta[2]*X))
+} 
+# EM Algorithm
+repeat{
+  
+  # E-step: Compute the conditional expectation of Y w.r.t the missing observations
+  Y_imputed <- ifelse(is.na(Y), p_i(beta, X), Y)
+  
+  # M-step: Update beta by maximizing the log-likelihood 
+ log_likelihood <- function(beta) { # log-likelihood given the observed data and estimate of beta
+    sum(Y_imputed*log(p_i(beta, X)) + (1-Y_imputed)*log(1-p_i(beta, X)))
+  }
+  # use optim() to minimize the negative of the log-likelihood
+  new_beta <- optim(beta, fn = function(beta) -log_likelihood(beta), method = 'BFGS')$par
+  # convergence criteria
+  if (sqrt(sum((new_beta - beta)^2)) < 1e-10){
+    break
+  }
+  # update beta
+  beta <- new_beta
+}
+# Final beta estimate
+beta
+```
+
